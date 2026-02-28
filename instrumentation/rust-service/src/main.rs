@@ -1,21 +1,16 @@
-use axum::{
-    routing::get,
-    Router,
-    response::IntoResponse,
-    http::StatusCode,
-};
-use opentelemetry::{global, KeyValue};
+use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
+use opentelemetry::{KeyValue, global};
 use opentelemetry_sdk::{
-    trace::{self, Tracer},
     Resource,
+    trace::{self, Tracer},
 };
 use opentelemetry_semantic_conventions::resource;
 use rand::Rng;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tracing::{error, info, instrument};
-use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
+use tracing_subscriber::layer::SubscriberExt;
 
 // Inicializa el pipeline de OpenTelemetry (Trazas)
 fn init_tracer() -> Tracer {
@@ -29,12 +24,10 @@ fn init_tracer() -> Tracer {
     opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(exporter)
-        .with_trace_config(
-            trace::config().with_resource(Resource::new(vec![
-                KeyValue::new(resource::SERVICE_NAME, "rust-service"),
-                KeyValue::new(resource::SERVICE_VERSION, "1.0.0"),
-            ])),
-        )
+        .with_trace_config(trace::config().with_resource(Resource::new(vec![
+            KeyValue::new(resource::SERVICE_NAME, "rust-service"),
+            KeyValue::new(resource::SERVICE_VERSION, "1.0.0"),
+        ])))
         .install_batch(opentelemetry_sdk::runtime::Tokio)
         .expect("Failed to initialize OpenTelemetry tracer")
 }
@@ -42,13 +35,13 @@ fn init_tracer() -> Tracer {
 #[instrument]
 async fn process_order() -> impl IntoResponse {
     let mut rng = rand::thread_rng();
-    
+
     // Simulate work
     let sleep_time = rng.gen_range(50..200);
     tokio::time::sleep(Duration::from_millis(sleep_time)).await;
 
     let price: f64 = rng.gen_range(10.0..110.0);
-    
+
     // Add custom event to trace
     tracing::info!(
         order.price = price,
@@ -73,8 +66,7 @@ async fn main() {
     let subscriber = Registry::default().with(telemetry);
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    let app = Router::new()
-        .route("/order", get(process_order));
+    let app = Router::new().route("/order", get(process_order));
 
     // Spawn traffic generator
     tokio::spawn(async {
@@ -87,7 +79,7 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
     info!("Rust Service listening on {}", addr);
-    
+
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 
