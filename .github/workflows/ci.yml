@@ -1,0 +1,61 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate-otel:
+    name: Validate OTel Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate OpenTelemetry Configuration
+        run: |
+          # Utilizamos yq o una herramienta similar para comprobar sintaxis YAML, 
+          # idealmente ejecutaríamos 'otelcol validate' si tuviéramos el binario.
+          docker run --rm -v ${{ github.workspace }}/otelcol:/etc/otelcol otel/opentelemetry-collector-contrib:0.96.0 validate --config=/etc/otelcol/config.yaml
+
+  go-service-ci:
+    name: Go Service Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./instrumentation/go-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Install dependencies
+        run: go mod download
+      - name: Run Build
+        run: go build -v ./...
+      - name: Run Tests
+        run: go test -v ./...
+
+  rust-service-ci:
+    name: Rust Service Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./instrumentation/rust-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Check formatting
+        run: cargo fmt -- --check
+      - name: Build
+        run: cargo build --verbose
