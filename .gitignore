@@ -1,0 +1,33 @@
+# General
+.DS_Store
+*.log
+.env
+.env.local
+
+# IDEs y Editores
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+.docker/
+
+# Binarios y temporales
+/bin/
+/build/
+/tmp/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Rust
+target/
+**/*.rs.bk
