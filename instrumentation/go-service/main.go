@@ -118,15 +118,13 @@ func main() {
 		// Random errors for RED/USE models
 		if rand.Intn(100) < 5 {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Internal Server Error
-"))
+			w.Write([]byte("Internal Server Error\n"))
 			span.RecordError(fmt.Errorf("simulated database failure"))
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Order processed
-"))
+		w.Write([]byte("Order processed\n"))
 	})
 
 	// Start a routine to generate constant fake traffic
