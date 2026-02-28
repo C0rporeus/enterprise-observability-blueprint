@@ -58,8 +58,6 @@ exporters:
   # Exportar logs a Loki
   loki:
     endpoint: "http://loki:3100/loki/api/v1/push"
-    default_labels:
-      job: "otel-collector"
 
   # Exportar trazas a Tempo
   otlp/tempo:
