@@ -31,7 +31,7 @@ processors:
       include:
         match_type: regexp
         metric_names:
-          - "^business\..*"
+          - '^business\..*'
   
   # Métricas técnicas (se excluyen las de negocio)
   filter/technical:
@@ -39,7 +39,7 @@ processors:
       exclude:
         match_type: regexp
         metric_names:
-          - "^business\..*"
+          - '^business\..*'
 
   # Enriquecimiento genérico de atributos
   resource/env:
