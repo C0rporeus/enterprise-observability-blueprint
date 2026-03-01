@@ -8,15 +8,26 @@ distributor:
         http:
         grpc:
 
+# Metrics generator: derives RED metrics from spans and sends to Prometheus
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
 storage:
   trace:
-    backend: local                     # backend configuration to use
+    backend: local
     wal:
-      path: /tmp/tempo/wal             # where to store the wal locally
+      path: /tmp/tempo/wal
     local:
       path: /tmp/tempo/blocks
 
 overrides:
   defaults:
     metrics_generator:
-      processors: [service-graphs, span-metrics] # enables metrics generator
+      processors: [service-graphs, span-metrics]

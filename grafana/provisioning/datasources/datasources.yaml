@@ -9,6 +9,9 @@ datasources:
     isDefault: true
     jsonData:
       httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
 
   - name: Loki
     type: loki

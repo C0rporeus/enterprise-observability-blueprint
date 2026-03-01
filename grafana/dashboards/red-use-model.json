@@ -15,6 +15,7 @@
       }
     ]
   },
+  "description": "RED/USE service dashboard. RED metrics (Rate, Errors, Duration) are derived from Tempo's span-metrics generator, not from SDK-level metrics. Requires Tempo metrics_generator with remote_write to Prometheus. USE metrics come from process runtime metrics.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -115,7 +116,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(http_server_duration_count{job="$job"}[5m])",
+          "expr": "rate(http_server_duration_count{job=\"$job\"}[5m])",
           "legendFormat": "Request Rate",
           "range": true,
           "refId": "A"
@@ -209,7 +210,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(http_server_duration_count{job="$job", http_status_code=~"5.."}[5m])",
+          "expr": "rate(http_server_duration_count{job=\"$job\", http_status_code=~\"5..\"}[5m])",
           "legendFormat": "5xx Errors",
           "range": true,
           "refId": "A"
@@ -307,7 +308,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_duration_bucket{job="$job"}[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_duration_bucket{job=\"$job\"}[5m])) by (le)) * 1000",
           "legendFormat": "p99",
           "range": true,
           "refId": "A"
@@ -318,7 +319,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_bucket{job="$job"}[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_bucket{job=\"$job\"}[5m])) by (le)) * 1000",
           "legendFormat": "p95",
           "range": true,
           "refId": "B"
@@ -421,7 +422,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job="$job"}",
+          "expr": "process_resident_memory_bytes{job=\"$job\"}",
           "legendFormat": "Memory Utilization",
           "range": true,
           "refId": "A"
@@ -511,7 +512,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job="$job"}[1m])",
+          "expr": "rate(process_cpu_seconds_total{job=\"$job\"}[1m])",
           "legendFormat": "CPU Saturation",
           "range": true,
           "refId": "A"
@@ -562,7 +563,7 @@
             "uid": "loki"
           },
           "editorMode": "builder",
-          "expr": "{job="$job"} | json",
+          "expr": "{job=\"$job\"} | json",
           "queryType": "range",
           "refId": "A"
         }
