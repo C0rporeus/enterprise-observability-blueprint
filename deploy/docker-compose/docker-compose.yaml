@@ -5,13 +5,21 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.96.0
     container_name: otel-collector
+    restart: unless-stopped
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
-      - ../../otelcol/config.yaml:/etc/otelcol/config.yaml
+      - ../../otelcol/config.yaml:/etc/otelcol/config.yaml:ro
     ports:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
       - "8888:8888" # Prometheus metrics exposed by the collector
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133"]
       interval: 10s
@@ -31,14 +39,24 @@ services:
   prometheus:
     image: prom/prometheus:v2.50.1
     container_name: prometheus
+    restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --enable-feature=otlp-write-receiver
+      - --enable-feature=otlp-write-receiver,exemplar-storage
       - --web.enable-remote-write-receiver
+      - --storage.tsdb.retention.time=7d
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
     ports:
       - "9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
       interval: 10s
@@ -51,11 +69,20 @@ services:
   loki:
     image: grafana/loki:2.9.4
     container_name: loki
+    restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
-      - ./loki.yaml:/etc/loki/local-config.yaml
+      - ./loki.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
     ports:
       - "3100:3100"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
       interval: 10s
@@ -68,12 +95,21 @@ services:
   tempo:
     image: grafana/tempo:2.4.0
     container_name: tempo
+    restart: unless-stopped
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
-      - ./tempo.yaml:/etc/tempo.yaml
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/tmp/tempo
     ports:
       - "3200:3200"   # Tempo
       - "4317"        # OTLP gRPC receiver (internal)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3200/ready"]
       interval: 10s
@@ -86,17 +122,26 @@ services:
   grafana:
     image: grafana/grafana:10.3.3
     container_name: grafana
+    restart: unless-stopped
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
     volumes:
-      - ../../grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-      - ../../grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ../../grafana/dashboards:/var/lib/grafana/dashboards
+      - ../../grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../../grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../../grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     ports:
       - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 10s
@@ -118,12 +163,21 @@ services:
       context: ../../instrumentation/go-service
       dockerfile: Dockerfile
     container_name: go-service
+    restart: unless-stopped
+    read_only: true
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_SERVICE_NAME=go-service
       - OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       otel-collector:
         condition: service_healthy
@@ -133,12 +187,27 @@ services:
       context: ../../instrumentation/rust-service
       dockerfile: Dockerfile
     container_name: rust-service
+    restart: unless-stopped
+    read_only: true
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_SERVICE_NAME=rust-service
       - OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
     ports:
       - "8081:8081"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       otel-collector:
         condition: service_healthy
+
+volumes:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
