@@ -4,12 +4,40 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::logs::SdkLoggerProvider;
 use opentelemetry_sdk::metrics::SdkMeterProvider;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::net::SocketAddr;
 use std::time::Duration;
-use tracing::{error, info, instrument};
+use tracing::{Instrument, error, info};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::Registry;
 use tracing_subscriber::layer::SubscriberExt;
+
+/// Injects OTel trace context into outgoing reqwest headers (W3C traceparent)
+struct HeaderInjector<'a>(&'a mut reqwest::header::HeaderMap);
+
+impl opentelemetry::propagation::Injector for HeaderInjector<'_> {
+    fn set(&mut self, key: &str, value: String) {
+        if let Ok(name) = reqwest::header::HeaderName::from_bytes(key.as_bytes()) {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&value) {
+                self.0.insert(name, val);
+            }
+        }
+    }
+}
+
+/// Extracts OTel trace context from incoming axum headers (W3C traceparent)
+struct HeaderExtractor<'a>(&'a axum::http::HeaderMap);
+
+impl opentelemetry::propagation::Extractor for HeaderExtractor<'_> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(|v| v.to_str().ok())
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(|k| k.as_str()).collect()
+    }
+}
 
 fn otel_resource() -> Resource {
     let service_name =
@@ -77,48 +105,61 @@ fn init_logger(resource: Resource, endpoint: &str) -> SdkLoggerProvider {
         .build()
 }
 
-#[instrument]
-async fn process_order() -> (StatusCode, &'static str) {
-    let meter = global::meter("rust-service-meter");
-    let orders_counter = meter
-        .u64_counter("business.orders.created")
-        .with_description("Number of orders created")
-        .build();
-    let order_value_counter = meter
-        .f64_counter("business.order.value")
-        .with_description("Total value of orders")
-        .build();
+async fn process_order(headers: axum::http::HeaderMap) -> (StatusCode, &'static str) {
+    // Extract parent trace context from incoming request headers
+    let parent_cx = global::get_text_map_propagator(|propagator| {
+        propagator.extract(&HeaderExtractor(&headers))
+    });
+    let span = tracing::info_span!("process_order");
+    span.set_parent(parent_cx);
 
-    // Simulate work
-    let sleep_time = rand::random_range(50..200);
-    tokio::time::sleep(Duration::from_millis(sleep_time)).await;
+    async move {
+        let meter = global::meter("rust-service-meter");
+        let orders_counter = meter
+            .u64_counter("business.orders.created")
+            .with_description("Number of orders created")
+            .build();
+        let order_value_counter = meter
+            .f64_counter("business.order.value")
+            .with_description("Total value of orders")
+            .build();
 
-    let price: f64 = rand::random_range(10.0..110.0);
+        // Simulate work
+        let sleep_time = rand::random_range(50..200);
+        tokio::time::sleep(Duration::from_millis(sleep_time)).await;
 
-    // Record business metrics
-    orders_counter.add(1, &[KeyValue::new("status", "success")]);
-    order_value_counter.add(price, &[KeyValue::new("currency", "EUR")]);
+        let price: f64 = rand::random_range(10.0..110.0);
 
-    // Add custom event to trace
-    tracing::info!(
-        order.price = price,
-        order.currency = "EUR",
-        "Order processed in rust-service"
-    );
+        // Record business metrics
+        orders_counter.add(1, &[KeyValue::new("status", "success")]);
+        order_value_counter.add(price, &[KeyValue::new("currency", "EUR")]);
 
-    // Simulate random errors for RED model
-    if rand::random_range(0..100) < 5 {
-        error!("Database connection timeout");
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error");
+        // Add custom event to trace
+        info!(
+            order.price = price,
+            order.currency = "EUR",
+            "Order processed in rust-service"
+        );
+
+        // Simulate random errors for RED model
+        if rand::random_range(0..100) < 5 {
+            error!("Database connection timeout");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error");
+        }
+
+        (StatusCode::OK, "Order processed by Rust")
     }
-
-    (StatusCode::OK, "Order processed by Rust")
+    .instrument(span)
+    .await
 }
 
 #[tokio::main]
 async fn main() {
     let resource = otel_resource();
     let endpoint = otel_endpoint();
+
+    // Set up W3C Trace Context propagator for cross-service correlation
+    global::set_text_map_propagator(TraceContextPropagator::new());
 
     // Initialize all three signal providers
     let tracer_provider = init_tracer(resource.clone(), &endpoint);
@@ -136,17 +177,28 @@ async fn main() {
 
     let app = Router::new().route("/order", get(process_order));
 
-    // Spawn traffic generator with trace context propagation
+    // Spawn traffic generator with proper W3C trace context propagation
     tokio::spawn(async {
-        // Wait for the server to start
         tokio::time::sleep(Duration::from_secs(2)).await;
         let client = reqwest::Client::new();
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            let tracer = global::tracer("rust-service-traffic");
-            use opentelemetry::trace::Tracer;
-            let _span = tracer.start("traffic-generator");
-            let _ = client.get("http://127.0.0.1:8081/order").send().await;
+
+            let span = tracing::info_span!("traffic-generator");
+            let _guard = span.enter();
+
+            // Inject trace context (traceparent header) into outgoing request
+            let mut headers = reqwest::header::HeaderMap::new();
+            let cx = opentelemetry::Context::current();
+            global::get_text_map_propagator(|propagator| {
+                propagator.inject_context(&cx, &mut HeaderInjector(&mut headers));
+            });
+
+            let _ = client
+                .get("http://127.0.0.1:8081/order")
+                .headers(headers)
+                .send()
+                .await;
         }
     });
 
