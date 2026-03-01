@@ -18,10 +18,10 @@ struct HeaderInjector<'a>(&'a mut reqwest::header::HeaderMap);
 
 impl opentelemetry::propagation::Injector for HeaderInjector<'_> {
     fn set(&mut self, key: &str, value: String) {
-        if let Ok(name) = reqwest::header::HeaderName::from_bytes(key.as_bytes()) {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&value) {
-                self.0.insert(name, val);
-            }
+        if let Ok(name) = reqwest::header::HeaderName::from_bytes(key.as_bytes())
+            && let Ok(val) = reqwest::header::HeaderValue::from_str(&value)
+        {
+            self.0.insert(name, val);
         }
     }
 }
@@ -68,7 +68,7 @@ fn init_tracer(resource: Resource, endpoint: &str) -> SdkTracerProvider {
         .with_resource(resource)
         .build();
 
-    let _ = global::set_tracer_provider(provider.clone());
+    global::set_tracer_provider(provider.clone());
     provider
 }
 
@@ -111,7 +111,7 @@ async fn process_order(headers: axum::http::HeaderMap) -> (StatusCode, &'static 
         propagator.extract(&HeaderExtractor(&headers))
     });
     let span = tracing::info_span!("process_order");
-    span.set_parent(parent_cx);
+    let _ = span.set_parent(parent_cx);
 
     async move {
         let meter = global::meter("rust-service-meter");
