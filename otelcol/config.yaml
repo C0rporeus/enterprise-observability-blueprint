@@ -5,8 +5,8 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-  
-  # Scrape del propio collector
+
+  # Scrape del propio collector para métricas internas
   prometheus:
     config:
       scrape_configs:
@@ -19,12 +19,12 @@ processors:
   batch:
     send_batch_size: 1000
     timeout: 10s
-  
+
   memory_limiter:
     check_interval: 1s
     limit_percentage: 70
     spike_limit_percentage: 30
-  
+
   # Separación de métricas de negocio (las que empiezan con 'business.')
   filter/business:
     metrics:
@@ -32,7 +32,7 @@ processors:
         match_type: regexp
         metric_names:
           - '^business\..*'
-  
+
   # Métricas técnicas (se excluyen las de negocio)
   filter/technical:
     metrics:
@@ -48,24 +48,57 @@ processors:
         value: "production"
         action: insert
 
+  # Detección automática de recursos del host
+  resourcedetection:
+    detectors: [env, system]
+    system:
+      hostname_sources: ["os"]
+
 exporters:
   # Exportar métricas a Prometheus
   prometheusremotewrite:
     endpoint: "http://prometheus:9090/api/v1/write"
     tls:
       insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
 
   # Exportar logs a Loki
   loki:
     endpoint: "http://loki:3100/loki/api/v1/push"
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
 
   # Exportar trazas a Tempo
   otlp/tempo:
     endpoint: "tempo:4317"
     tls:
       insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
 
-  # Debug visual
+  # Debug visual (sin retry/queue ya que es local)
   logging:
     verbosity: detailed
 
@@ -76,25 +109,30 @@ extensions:
 
 service:
   extensions: [health_check, zpages]
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource/env, batch]
+      processors: [memory_limiter, resourcedetection, resource/env, batch]
       exporters: [otlp/tempo, logging]
 
     # Métricas de negocio (prefijo 'business.')
     metrics/business:
       receivers: [otlp]
-      processors: [memory_limiter, filter/business, resource/env, batch]
+      processors: [memory_limiter, filter/business, resourcedetection, resource/env, batch]
       exporters: [prometheusremotewrite, logging]
 
     # Métricas técnicas (todo excepto 'business.')
     metrics/technical:
       receivers: [otlp, prometheus]
-      processors: [memory_limiter, filter/technical, resource/env, batch]
+      processors: [memory_limiter, filter/technical, resourcedetection, resource/env, batch]
       exporters: [prometheusremotewrite, logging]
 
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resource/env, batch]
+      processors: [memory_limiter, resourcedetection, resource/env, batch]
       exporters: [loki, logging]
