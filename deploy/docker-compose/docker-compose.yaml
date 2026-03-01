@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ---------------------------------------
   # OpenTelemetry Collector
@@ -14,10 +12,18 @@ services:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
       - "8888:8888" # Prometheus metrics exposed by the collector
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     depends_on:
-      - prometheus
-      - loki
-      - tempo
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
 
   # ---------------------------------------
   # Prometheus (Metrics)
@@ -33,6 +39,11 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # ---------------------------------------
   # Loki (Logs)
@@ -45,6 +56,11 @@ services:
       - ./loki.yaml:/etc/loki/local-config.yaml
     ports:
       - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # ---------------------------------------
   # Tempo (Distributed Tracing)
@@ -58,6 +74,11 @@ services:
     ports:
       - "3200:3200"   # Tempo
       - "4317"        # OTLP gRPC receiver (internal)
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # ---------------------------------------
   # Grafana (Visualization)
@@ -67,7 +88,7 @@ services:
     container_name: grafana
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
     volumes:
@@ -76,10 +97,18 @@ services:
       - ../../grafana/dashboards:/var/lib/grafana/dashboards
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     depends_on:
-      - prometheus
-      - loki
-      - tempo
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
 
   # ---------------------------------------
   # Instrumented Services
@@ -91,10 +120,13 @@ services:
     container_name: go-service
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=go-service
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
     ports:
       - "8080:8080"
     depends_on:
-      - otel-collector
+      otel-collector:
+        condition: service_healthy
 
   rust-service:
     build:
@@ -103,7 +135,10 @@ services:
     container_name: rust-service
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=rust-service
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
     ports:
       - "8081:8081"
     depends_on:
-      - otel-collector
+      otel-collector:
+        condition: service_healthy
