@@ -6,8 +6,9 @@ edition = "2024"
 [dependencies]
 axum = "0.8.8"
 opentelemetry = "0.31.0"
-opentelemetry-otlp = { version = "0.31.0", features = ["trace", "metrics", "grpc-tonic", "reqwest-client"] }
-opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31.0", features = ["trace", "metrics", "logs", "grpc-tonic", "reqwest-client"] }
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "logs"] }
+opentelemetry-appender-tracing = "0.31.0"
 rand = "0.10.0"
 reqwest = "0.13.2"
 tokio = { version = "1.49.0", features = ["full"] }
