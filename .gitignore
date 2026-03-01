@@ -20,7 +20,6 @@
 
 # Go
 *.exe
-go-service
 instrumentation/go-service/go-service
 *.exe~
 *.dll

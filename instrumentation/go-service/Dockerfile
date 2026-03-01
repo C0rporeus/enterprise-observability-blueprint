@@ -7,7 +7,7 @@ RUN go mod download
 COPY main.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o /go-service main.go
 
-FROM alpine:latest
+FROM alpine:3.21
 WORKDIR /
 COPY --from=builder /go-service /go-service
 

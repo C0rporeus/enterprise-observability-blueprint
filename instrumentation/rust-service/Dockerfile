@@ -8,7 +8,7 @@ COPY src ./src
 # Hacemos un touch a main.rs para forzar reconstrucción
 RUN touch src/main.rs && cargo build --release
 
-FROM alpine:latest
+FROM alpine:3.21
 WORKDIR /app
 COPY --from=builder /app/target/release/rust-service ./
 EXPOSE 8081
