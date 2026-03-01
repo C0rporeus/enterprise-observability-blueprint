@@ -81,12 +81,19 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, resource/env, batch]
       exporters: [otlp/tempo, logging]
-    
-    metrics:
-      receivers: [otlp, prometheus]
-      processors: [memory_limiter, resource/env, batch]
+
+    # Métricas de negocio (prefijo 'business.')
+    metrics/business:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/business, resource/env, batch]
       exporters: [prometheusremotewrite, logging]
-      
+
+    # Métricas técnicas (todo excepto 'business.')
+    metrics/technical:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, filter/technical, resource/env, batch]
+      exporters: [prometheusremotewrite, logging]
+
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource/env, batch]
